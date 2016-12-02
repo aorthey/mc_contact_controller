@@ -1,6 +1,9 @@
 #include "mc_myfirst_controller.h"
 #include <mc_rtc/logging.h>
 
+
+
+
 namespace mc_control
 {
 
@@ -12,31 +15,50 @@ namespace mc_control
                 qpsolver->addConstraintSet(kinematicsConstraint);
                 qpsolver->addTask(postureTask.get());
                 qpsolver->setContacts({});
-                LOG_SUCCESS("MCMyFirstController init done " << this);
-                LOG_SUCCESS("MCMyFirstController init done " << this);
-                //head_joint_index = robot().jointIndexByName("HEAD_JOINT0");
-                head_joint_index = robot().jointIndexByName("NECK_P");
 
                 LOG_SUCCESS("MCMyFirstController robot loading " << robot().name());
-                if(robot().name() == "hrp2_drc"){
-                        head_joint_index = robot().jointIndexByName("HEAD_JOINT1");
-                }else if(robot().name() == "hrp4"){
+                this->info();
+
+                if(robot().name() == "hrp4"){
                         head_joint_index = robot().jointIndexByName("NECK_P");
                 }else{
                         LOG_ERROR("This controller does not know how to handle the robot you are controlling (" << robot().name() << ")")
-                        LOG_WARNING("It will control a random joint")
                         exit(0);
                 }
+                this->ros_bridge = mc_rtc::ROSBridge::get_node_handle();
                 LOG_SUCCESS("MCMyFirstController init done " << this);
 
 
         }
+        void MCMyFirstController::info()
+        {
+                //display robot info
+                std::cout << "----- INFO -----" << std::endl;
+                std::cout << "ROBOT:    " << robot().name() << std::endl;
+                const rbd::MultiBody mb = robot().mb();
+                std::cout << "#JOINTS : " << mb.nrJoints() << std::endl;
+                std::cout << "#LINKS  : " << mb.nrBodies() << std::endl;
+                const std::vector< rbd::Joint > joints = mb.joints();
+
+                std::vector< rbd::Joint >::const_iterator iter;
+                int jctr = 0;
+                for( iter = joints.begin(); iter!=joints.end(); iter++){
+                        std::cout << " [" << jctr++ << "]:" << (*iter).name() << std::endl;
+
+                }
+                std::cout << "----- INFO -----" << std::endl;
+        }
         bool MCMyFirstController::run()
         {
                 bool ret = MCController::run();
-                if(std::abs(postureTask->posture()[head_joint_index][0] - robot().mbc().q[head_joint_index][0]) < 0.05) {
-                        switch_target();
-                }
+                std::vector<std::vector<double>> cur_obj = postureTask->posture();
+
+                int head_joint_yaw = robot().jointIndexByName("NECK_P");
+                int head_joint_pitch = robot().jointIndexByName("NECK_Y");
+                cur_obj[head_joint_yaw][0] = robot().ql()[head_joint_yaw][0];
+                cur_obj[head_joint_pitch][0] = robot().ql()[head_joint_pitch][0];
+
+                postureTask->posture(cur_obj);
                 return ret;
         }
 
