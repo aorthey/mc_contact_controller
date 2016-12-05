@@ -2,6 +2,9 @@
 #include <mc_control/mc_controller.h>
 #include <mc_control/api.h>
 #include <mc_rtc/ros.h>
+#include <mc_tasks/CoMTask.h>
+#include <mc_rtc/logging.h>
+#include <mc_rbdyn/Surface.h>
 
 namespace mc_control
 {
@@ -18,6 +21,8 @@ namespace mc_control
                         int head_joint_index;
                         bool target_left;
                         std::shared_ptr<ros::NodeHandle> ros_bridge;
+                        std::shared_ptr<mc_tasks::CoMTask> comTask;
+                        Eigen::Vector3d comZero;
 
         };
 
