@@ -3,6 +3,9 @@
 #include <mc_control/api.h>
 #include <mc_rtc/ros.h>
 #include <mc_tasks/CoMTask.h>
+#include <mc_tasks/EndEffectorTask.h>
+#include <mc_tasks/MoveContactTask.h>
+#include <mc_tasks/StabilityTask.h>
 #include <mc_rtc/logging.h>
 #include <mc_rbdyn/Surface.h>
 
@@ -22,7 +25,10 @@ namespace mc_control
                         bool target_left;
                         std::shared_ptr<ros::NodeHandle> ros_bridge;
                         std::shared_ptr<mc_tasks::CoMTask> comTask;
+                        std::shared_ptr<mc_tasks::EndEffectorTask> efTask;
+                        std::shared_ptr<mc_tasks::StabilityTask> stableTask;
                         Eigen::Vector3d comZero;
+                        sva::PTransformd transformZero;
 
         };
 
