@@ -29,13 +29,12 @@ namespace mc_control
                 //*************************************************************
                 postureTask->stiffness(1.);
                 qpsolver->addTask(postureTask.get());
-
                 
                 //*************************************************************
                 //COM task
                 //*************************************************************
-                //comTask = std::make_shared<mc_tasks::CoMTask>(robots(), robots().robotIndex(), 2.0, 100.);
-                //qpsolver->addTask(comTask);
+                comTask = std::make_shared<mc_tasks::CoMTask>(robots(), robots().robotIndex(), 2.0, 100.);
+                qpsolver->addTask(comTask);
 
                 //*************************************************************
                 //Stability Task
@@ -46,34 +45,57 @@ namespace mc_control
                 //*************************************************************
                 //Endeffector Task
                 //*************************************************************
-                //left_hand = std::make_shared<mc_tasks::EndEffectorTask>("L_HAND_J1_LINK", robots(), robots().robotIndex(), 5.0, 10.);
                 double stiffness = 5.0;
                 double task_weight = 10.0;
                 task_right_hand = std::make_shared<mc_tasks::EndEffectorTask>("R_F23_LINK",
                         robots(), robots().robotIndex(),
                         stiffness, task_weight);
+
                 qpsolver->addTask(task_right_hand);
+
                 task_left_hand = std::make_shared<mc_tasks::EndEffectorTask>("L_F23_LINK",
                         robots(), robots().robotIndex(),
                         stiffness, task_weight);
+
                 qpsolver->addTask(task_left_hand);
+
+
+                LOG_SUCCESS("Added Hand EndEffectorTask");
+
+                // Note: A EE-task is based on LINKS, while a contact is based on
+                // surfaces!
+                task_left_foot  = std::make_shared<mc_tasks::EndEffectorTask>
+                        ("l_sole", 
+                        robots(), 
+                        robots().robotIndex(),
+                        stiffness, 
+                        task_weight);
+                contact_left_foot = std::make_shared<mc_rbdyn::Contact>
+                        (robots(), 
+                         "LeftFoot", 
+                         "AllGround");
+                task_right_foot  = std::make_shared<mc_tasks::EndEffectorTask>
+                        ("r_sole", 
+                        robots(), 
+                        robots().robotIndex(),
+                        stiffness, 
+                        task_weight);
+                contact_right_foot = std::make_shared<mc_rbdyn::Contact>
+                        (robots(), 
+                         "RightFoot", 
+                         "AllGround");
 
                 //*************************************************************
                 //Set Contact task
                 //*************************************************************
-                qpsolver->setContacts({
-                        {robots(), 0, 1, "LeftFoot", "AllGround"},
-                        {robots(), 0, 1, "RightFoot", "AllGround"},
-                        //{robots(), 0, 1, "LeftHand", "AllGround"},
-                });
+                qpsolver->setContacts({*contact_left_foot, *contact_right_foot});
 
+                contact_state = PRE_CONTACT_BREAK;
 
-                //this->moveJointByName("NECK_P");
-                //this->moveJointByName("NECK_Y");
-
+                Eigen::Vector3d T = task_left_foot->get_ef_pose().translation();
+                comTask->com(comTask->com() + Eigen::Vector3d(-T.x(), -T.y(), 0));
                 
                 // qpsolver->addConstraintSet(selfCollisionConstraint);
-
                 // selfCollisionConstraint.addCollisions(qpsolver, {
                 //         {"RARM_LINK5", "RLEG_LINK2", 0.05, 0.01, 0.},
                 //         {"RARM_LINK6", "RLEG_LINK2", 0.05, 0.01, 0.},
@@ -101,21 +123,57 @@ namespace mc_control
                 //*************************************************************
                 this->moveJointByName("NECK_P");
                 this->moveJointByName("NECK_Y");
-                this->moveJointByName("L_ELBOW_P");
+                //this->moveJointByName("L_ELBOW_P");
 
                 //*************************************************************
                 // Endeffectortask: Move endeffector EE to position
                 // (x,y,z) \in R^3 x SO(3) = SE(3)
                 //*************************************************************
-                sva::PTransformd desired_pose(Eigen::Vector3d(0.5, -0.5, 1.0));
-                task_right_hand->set_ef_pose(desired_pose);
-
-                std::cout<< "[EE TASK] right hand dist to target:" <<
-                        task_right_hand->eval().norm() <<std::endl;
+                //sva::PTransformd desired_pose(Eigen::Vector3d(0.5, -0.5, 1.0));
+                //task_right_hand->set_ef_pose(desired_pose);
 
                 //*************************************************************
                 // Move Contact Task
                 //*************************************************************
+                switch (contact_state) {
+                        case PRE_CONTACT_BREAK:
+                                 //make sure COM is safe before removing contact
+                                qpsolver->setContacts({*contact_left_foot, *contact_right_foot});
+                                std::cout << "PRE_CONTACT_BREAK:" << comTask->eval().norm() << "|" << comTask->speed().norm() << std::endl;
+                                if(comTask->eval().norm() < 5e-2 && comTask->speed().norm() < 1e-4){
+                                        LOG_SUCCESS("Moved COM.");
+                                        LOG_SUCCESS("Starting contact Transition.");
+                                        contact_state=CONTACT_BREAK;
+                                }
+                                break;
+                        case CONTACT_BREAK:
+                                // break contact
+                                qpsolver->setContacts({*contact_right_foot});
+                                qpsolver->addTask(task_left_foot);
+                                task_left_foot->add_ef_pose(sva::PTransformd(Eigen::Vector3d(0.4, 0, 0)));
+                                contact_state=ENDEFFECTOR_TRANSITION;
+                                break;
+                        case ENDEFFECTOR_TRANSITION:
+                                // move endeffector towards new contact
+                                // (transfer path)
+                                if(task_left_foot->eval().norm() < 5e-2 
+                                        && task_left_foot->speed().norm() < 1e-4){
+                                        // job done
+                                        contact_state = CONTACT_MAKE;
+                                }
+                                break;
+                        case CONTACT_MAKE:
+                                // make contact
+                                qpsolver->setContacts({*contact_left_foot, *contact_right_foot});
+                                qpsolver->removeTask(task_left_foot);
+                                contact_state = POST_CONTACT_MAKE;
+                                break;
+                        case POST_CONTACT_MAKE:
+                                // make contact
+                                LOG_SUCCESS("Contact Transition completed.")
+                                qpsolver->setContacts({*contact_left_foot, *contact_right_foot});
+                                break;
+                }
                 // if(!moved_com)
                 // {
                 //         if(comTask->eval().norm() < 5e-2 && comTask->speed().norm() < 1e-4)
@@ -161,17 +219,19 @@ namespace mc_control
         {
                 //init task-COM to current COM
                 MCController::reset(reset_data);
-                //task_left_hand->reset();
+                task_left_hand->reset();
                 task_right_hand->reset();
-                //right_hand_current_pose = task_right_hand->get_ef_pose();
 
-                //comTask->reset();
+                task_left_foot->reset();
+                task_right_foot->reset();
+
+                right_hand_current_pose = task_right_hand->get_ef_pose();
+
+                comTask->reset();
                 //stableTask->reset();
 
                 //comZero = rbd::computeCoM(robot().mb(), robot().mbc());
                 //transformZero = efTask->get_ef_pose();
-
-                // comTask = std::make_shared<mc_tasks::CoMTask>(robots(), 0);
 
                 //efTask = std::make_shared<mc_tasks::EndEffectorTask>("LLEG_LINK5", robots(), 0);
                 // comTask->com(comTask->com() + Eigen::Vector3d(0,
