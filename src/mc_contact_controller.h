@@ -21,10 +21,10 @@ namespace mc_control
                 POST_CONTACT_MAKE
         };
 
-        struct MC_CONTROL_DLLAPI MCMyFirstController : public MCController
+        struct MC_CONTROL_DLLAPI MCContactController : public MCController
         {
                 public:
-                        MCMyFirstController(std::shared_ptr<mc_rbdyn::RobotModule> robot, double dt);
+                        MCContactController(std::shared_ptr<mc_rbdyn::RobotModule> robot, double dt);
                         virtual bool run() override;
                         virtual void reset(const ControllerResetData & reset_data) override;
                         void info();
@@ -61,4 +61,4 @@ namespace mc_control
 
 
 }
-SIMPLE_CONTROLLER_CONSTRUCTOR("MyFirst", mc_control::MCMyFirstController)
+SIMPLE_CONTROLLER_CONSTRUCTOR("ContactController", mc_control::MCContactController)

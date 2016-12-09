@@ -4,7 +4,7 @@
 namespace mc_control
 {
 
-        MCMyFirstController::MCMyFirstController(std::shared_ptr<mc_rbdyn::RobotModule> robot_module, double dt)
+        MCContactController::MCContactController(std::shared_ptr<mc_rbdyn::RobotModule> robot_module, double dt)
                   : MCController(robot_module, dt)
         {
 
@@ -13,7 +13,7 @@ namespace mc_control
                 //*************************************************************
                 // check that right robot is loaded
                 //*************************************************************
-                LOG_SUCCESS("MCMyFirstController robot loading " << robot().name());
+                LOG_SUCCESS("MCContactController robot loading " << robot().name());
                 if(robot().name() != "hrp4"){
                         LOG_ERROR("This controller does not know how to handle the robot you are controlling (" << robot().name() << ")")
                         exit(0);
@@ -103,18 +103,18 @@ namespace mc_control
                 // });
                 
                 // this->ros_bridge = mc_rtc::ROSBridge::get_node_handle();
-                // LOG_SUCCESS("MCMyFirstController init done " << this);
+                // LOG_SUCCESS("MCContactController init done " << this);
 
 
         }
 
-        void MCMyFirstController::moveJointByName(std::string joint_name){
+        void MCContactController::moveJointByName(std::string joint_name){
                 std::vector<std::vector<double>> cur_obj = postureTask->posture();
                 int jind = robot().jointIndexByName(joint_name);
                 cur_obj[jind][0] = robot().qu()[jind][0];
                 postureTask->posture(cur_obj);
         }
-        bool MCMyFirstController::run()
+        bool MCContactController::run()
         {
                 bool ret = MCController::run();
                 //*************************************************************
@@ -215,7 +215,7 @@ namespace mc_control
 
         }
 
-        void MCMyFirstController::reset(const ControllerResetData & reset_data)
+        void MCContactController::reset(const ControllerResetData & reset_data)
         {
                 //init task-COM to current COM
                 MCController::reset(reset_data);
@@ -240,10 +240,10 @@ namespace mc_control
                 //qpsolver->addTask(comTask);
         }
 
-        // void MCMyFirstController::display_joints()
-        // void MCMyFirstController::display_bodies()
-        // void MCMyFirstController::display_surfaces()
-        void MCMyFirstController::info()
+        // void MCContactController::display_joints()
+        // void MCContactController::display_bodies()
+        // void MCContactController::display_surfaces()
+        void MCContactController::info()
         {
         
                 //*************************************************************
