@@ -1,9 +1,9 @@
 set(controller_SRC
-  mc_myfirst_controller.cpp
+  mc_contact_controller.cpp
 )
 
 set(controller_HDR
-  mc_myfirst_controller.h
+  mc_contact_controller.h
 )
 
 add_library(${PROJECT_NAME} SHARED ${controller_SRC} ${controller_HDR})

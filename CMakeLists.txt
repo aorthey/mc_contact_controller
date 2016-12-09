@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 2.8)
 
 include(cmake/base.cmake)
 
-set(PROJECT_NAME mc_myfirst_controller)
-set(PROJECT_DESCRIPTION "Simple controller")
-set(PROJECT_URL https://gite.lirmm.fr/me/mc_myfirst_controller)
+set(PROJECT_NAME mc_contact_controller)
+set(PROJECT_DESCRIPTION "Contact controller")
+set(PROJECT_URL https://gite.lirmm.fr/me/mc_contact_controller)
 
 setup_project()
 

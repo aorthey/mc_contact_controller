@@ -1,4 +1,4 @@
-#include "mc_myfirst_controller.h"
+#include "mc_contact_controller.h"
 
 
 namespace mc_control
