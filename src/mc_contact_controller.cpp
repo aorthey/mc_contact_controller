@@ -7,6 +7,8 @@ namespace mc_control
         MCContactController::MCContactController(std::shared_ptr<mc_rbdyn::RobotModule> robot_module, double dt)
                   : MCController(robot_module, dt)
         {
+                //  virtual mc_rbdyn::Robot & robot();
+                //  virtual mc_rbdyn::Robot & env();
 
                 this->info();
 
@@ -135,6 +137,9 @@ namespace mc_control
                 //*************************************************************
                 // Move Contact Task
                 //*************************************************************
+                double speed =0.05;
+                double stiffness  =2.0;
+                double weight  = 1000;
                 switch (contact_state) {
                         case PRE_CONTACT_BREAK:
                                  //make sure COM is safe before removing contact
@@ -143,30 +148,70 @@ namespace mc_control
                                 if(comTask->eval().norm() < 5e-2 && comTask->speed().norm() < 1e-4){
                                         LOG_SUCCESS("Moved COM.");
                                         LOG_SUCCESS("Starting contact Transition.");
+                                        qpsolver->setContacts({*contact_right_foot});
+                                        aRContactTask.reset(
+                                                new mc_tasks::RemoveContactTask(robots(),
+                                                                  bSpeedConstr,
+                                                                  *contact_left_foot,
+                                                                  speed,
+                                                                  stiffness,
+                                                                  weight)
+                                        );
+                                        qpsolver->addTask(aRContactTask);
+                                        this->left_foot_z = task_left_foot->get_ef_pose().translation().z();
+                                        //#### CONTINUE #########
                                         contact_state=CONTACT_BREAK;
                                 }
                                 break;
                         case CONTACT_BREAK:
-                                // break contact
-                                qpsolver->setContacts({*contact_right_foot});
-                                qpsolver->addTask(task_left_foot);
-                                task_left_foot->add_ef_pose(sva::PTransformd(Eigen::Vector3d(0.4, 0, 0)));
-                                contact_state=ENDEFFECTOR_TRANSITION;
+                                // contact is broken if 
+
+                                //double left_foot_z_current = task_left_foot->get_ef_pose().translation().z();
+
+                                if(task_left_foot->get_ef_pose().translation().z()> this->left_foot_z + 0.05){
+                                        LOG_SUCCESS("Left foot contact removed")
+                                        qpsolver->removeTask(aRContactTask);
+
+                                        mc_rbdyn::Contact targetContact(robots(), "LFullSole", "AllGround", sva::PTransformd(Eigen::Vector3d(0.4, 0, 0)));
+
+                                        //double posStiffness, 
+                                        //double extraPosStiffness, 
+                                        //double posWeight, 
+                                        //double oriStiffness, 
+                                        //double oriWeight, 
+                                        //double preContactDist,
+                                        task_move_contact = std::make_shared<mc_tasks::MoveContactTask>(robots(),
+                                                         robot(),
+                                                         env(),
+                                                         targetContact,
+                                                         5.0, 5.0, 1000,
+                                                         3.0, 500,
+                                                         0.05,
+                                                         mc_rbdyn::percentWaypoint(0.5, 0.5, 0.5, 0.1));
+                                        qpsolver->addTask(task_move_contact);
+                                        task_move_contact->toWaypoint();
+                                        //#### CONTINUE #########
+                                        contact_state=ENDEFFECTOR_TRANSITION;
+                                }
+
                                 break;
                         case ENDEFFECTOR_TRANSITION:
-                                // move endeffector towards new contact
+                                // move endeffector towards waypoint
                                 // (transfer path)
-                                if(task_left_foot->eval().norm() < 5e-2 
-                                        && task_left_foot->speed().norm() < 1e-4){
-                                        // job done
+                                if(task_move_contact->eval().norm() < 5e-2){
+                                        LOG_SUCCESS("Moved the left foot to waypoint")
+                                        task_move_contact->toPreEnv();
                                         contact_state = CONTACT_MAKE;
                                 }
                                 break;
                         case CONTACT_MAKE:
-                                // make contact
-                                qpsolver->setContacts({*contact_left_foot, *contact_right_foot});
-                                qpsolver->removeTask(task_left_foot);
-                                contact_state = POST_CONTACT_MAKE;
+                                // from waypoint towards contact
+                                if(task_move_contact->speed().norm() < 1e-4) {
+                                        qpsolver->removeTask(task_move_contact);
+                                        qpsolver->setContacts({*contact_left_foot, *contact_right_foot});
+                                        qpsolver->removeTask(task_left_foot);
+                                        contact_state = POST_CONTACT_MAKE;
+                                }
                                 break;
                         case POST_CONTACT_MAKE:
                                 // make contact
@@ -228,6 +273,9 @@ namespace mc_control
                 right_hand_current_pose = task_right_hand->get_ef_pose();
 
                 comTask->reset();
+
+                bSpeedConstr = std::make_shared<mc_solver::BoundedSpeedConstr>(robots(), 0, timeStep);
+                solver().addConstraintSet(*bSpeedConstr);
                 //stableTask->reset();
 
                 //comZero = rbd::computeCoM(robot().mb(), robot().mbc());
@@ -240,20 +288,7 @@ namespace mc_control
                 //qpsolver->addTask(comTask);
         }
 
-        // void MCContactController::display_joints()
-        // void MCContactController::display_bodies()
-        // void MCContactController::display_surfaces()
-        void MCContactController::info()
-        {
-        
-                //*************************************************************
-                //display robot info
-                //*************************************************************
-                std::cout << "----- INFO START " << std::string(63, '-') << std::endl;
-                std::cout << "ROBOT:    " << robot().name() << std::endl;
-                const rbd::MultiBody mb = robot().mb();
-                //*************************************************************
-                std::cout << "#########################################" << std::endl;
+        void MCContactController::display_joints( const rbd::MultiBody &mb){
                 std::cout << "#JOINTS : " << mb.nrJoints() << std::endl;
                 const std::vector< rbd::Joint > joints = mb.joints();
                 std::vector< rbd::Joint >::const_iterator jiter;
@@ -261,8 +296,8 @@ namespace mc_control
                 for( jiter = joints.begin(); jiter!=joints.end(); jiter++){
                         std::cout << " [" << jctr++ << "]:" << (*jiter).name() << std::endl;
                 }
-                //*************************************************************
-                std::cout << "#########################################" << std::endl;
+        }
+        void MCContactController::display_bodies(const rbd::MultiBody &mb){
                 std::cout << "#LINKS  : " << mb.nrBodies() << std::endl;
                 const std::vector< rbd::Body > bodies = mb.bodies();
 
@@ -271,18 +306,48 @@ namespace mc_control
                 for( biter = bodies.begin(); biter!=bodies.end(); biter++){
                         std::cout << " [" << bctr++ << "]:" << (*biter).name() << std::endl;
                 }
-                //*************************************************************
-                std::cout << "#########################################" << std::endl;
+        }
+        void MCContactController::display_surfaces( const std::map<std::string, mc_rbdyn::SurfacePtr> &surfaces){
                 std::cout << "#SURFACES" << std::endl;
-                const std::map<std::string, mc_rbdyn::SurfacePtr> surfaces = robot().surfaces();
                 std::map<std::string, mc_rbdyn::SurfacePtr>::const_iterator siter;
                 int sctr = 0;
                 for( siter = surfaces.begin(); siter!=surfaces.end(); siter++){
                         std::cout << " [" << sctr++ << "]:" << (*siter).first << std::endl;
                 }
-                std::cout << "#########################################" << std::endl;
+        }
+        void MCContactController::info()
+        {
+        
+                //  virtual mc_rbdyn::Robot & robot();
+                //  virtual mc_rbdyn::Robot & env();
                 //*************************************************************
-
+                //display robot info
+                //*************************************************************
+                std::cout << "----- INFO START " << std::string(63, '-') << std::endl;
+                std::cout << "ROBOT:    " << robot().name() << std::endl;
+                //*************************************************************
+                std::cout << std::string(80,'#') << std::endl;
+                this->display_joints(robot().mb());
+                //*************************************************************
+                std::cout << std::string(80,'#') << std::endl;
+                this->display_bodies(robot().mb());
+                //*************************************************************
+                std::cout << std::string(80,'#') << std::endl;
+                this->display_surfaces(robot().surfaces());
+                //*************************************************************
+                //*************************************************************
+                std::cout << std::string(80,'#') << std::endl;
+                std::cout << "ENVIRONMENT:" << env().name() << std::endl;
+                //*************************************************************
+                std::cout << std::string(80,'#') << std::endl;
+                this->display_joints(env().mb());
+                //*************************************************************
+                std::cout << std::string(80,'#') << std::endl;
+                this->display_bodies(env().mb());
+                //*************************************************************
+                std::cout << std::string(80,'#') << std::endl;
+                this->display_surfaces(env().surfaces());
+                //*************************************************************
 
                 std::cout << "----- INFO END   " << std::string(63, '-') << std::endl;
         }

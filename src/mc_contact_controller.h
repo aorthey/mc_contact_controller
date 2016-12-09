@@ -9,7 +9,6 @@
 #include <mc_tasks/MoveContactTask.h>
 #include <mc_tasks/StabilityTask.h>
 #include <mc_rtc/logging.h>
-#include <mc_rbdyn/Surface.h>
 
 namespace mc_control
 {
@@ -24,15 +23,20 @@ namespace mc_control
         struct MC_CONTROL_DLLAPI MCContactController : public MCController
         {
                 public:
-                        MCContactController(std::shared_ptr<mc_rbdyn::RobotModule> robot, double dt);
+                        MCContactController(std::shared_ptr<mc_rbdyn::RobotModule> robot_module, double dt);
                         virtual bool run() override;
                         virtual void reset(const ControllerResetData & reset_data) override;
                         void info();
                         void moveJointByName(std::string joint_name);
+                        void display_joints( const rbd::MultiBody &mb);
+                        void display_bodies(const rbd::MultiBody &mb);
+                        void display_surfaces( const std::map<std::string, mc_rbdyn::SurfacePtr> &surfaces);
                 private:
                         std::shared_ptr<ros::NodeHandle> ros_bridge;
 
                         Eigen::Vector3d comZero;
+                        double left_foot_z;
+                        std::shared_ptr<mc_tasks::MoveContactTask> task_move_contact;
 
                         //specification of contact surfaces
                         std::shared_ptr<mc_tasks::EndEffectorTask> task_left_hand;
@@ -48,10 +52,10 @@ namespace mc_control
                         std::shared_ptr<mc_rbdyn::Contact> contact_right_foot;
                         std::shared_ptr<mc_rbdyn::Contact> contact_left_foot;
 
-                        ContactState contact_state;
+                        std::shared_ptr<mc_solver::BoundedSpeedConstr> bSpeedConstr;
+                        std::shared_ptr<mc_tasks::AddRemoveContactTask> aRContactTask;
 
-                        // std::shared_ptr<mc_solver::BoundedSpeedConstr> bSpeedConstr;
-                        // std::shared_ptr<mc_tasks::AddRemoveContactTask> aRContactTask;
+                        ContactState contact_state;
 
                         std::shared_ptr<mc_tasks::CoMTask> comTask;
                         // std::shared_ptr<mc_tasks::StabilityTask> stableTask;
