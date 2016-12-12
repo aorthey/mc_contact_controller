@@ -134,7 +134,13 @@ namespace mc_control
                 double speed = 0.1;
                 double stiffness = 2.0;
                 double weight = 1000;
-                double lf_height = 0.05;
+
+                double posStiffness = 5.0;
+                double extraPosStiffness = 5.0;
+                double posWeight = 1000;
+                double oriStiffness = 3.0;
+                double oriWeight = 500;
+                double preContactDist = 0.02;
 
                 double lf_z = robot().mbc().bodyPosW[robot().bodyIndexByName("l_sole")].translation().z();
                 switch (contact_state) {
@@ -143,7 +149,7 @@ namespace mc_control
                                 qpsolver->setContacts({*contact_left_foot, *contact_right_foot});
                                 this->display_com();
                                 std::cout << "PRE_CONTACT_BREAK:" << comTask->eval().norm() << "|" << comTask->speed().norm() << std::endl;
-                                if(comTask->eval().norm() < 1e-3){
+                                if(comTask->eval().norm() < 0.008){
                                         LOG_SUCCESS("Moved COM.");
                                         LOG_SUCCESS("Starting contact Transition.");
                                         qpsolver->setContacts({*contact_right_foot});
@@ -168,7 +174,7 @@ namespace mc_control
 
                                 LOG_SUCCESS("Removing left foot contact " << lf_z);
                                 //double lf_z = robot().mbc().bodyPosW[robot().bodyIndexByName("l_sole")].translation().z();
-                                if( lf_z > this->left_foot_z + lf_height){
+                                if( lf_z > this->left_foot_z + preContactDist){
                                         LOG_SUCCESS("Left foot contact removed")
                                         qpsolver->removeTask(aRContactTask);
 
@@ -182,13 +188,16 @@ namespace mc_control
                                         //double oriWeight, 
                                         //double preContactDist,
                                         task_move_contact = std::make_shared<mc_tasks::MoveContactTask>(robots(),
-                                                         robot(),
-                                                         env(),
-                                                         targetContact,
-                                                         5.0, 5.0, 1000,
-                                                         3.0, 500,
-                                                         lf_height,
-                                                         mc_rbdyn::percentWaypoint(0.5, 0.5, 0.5, 0.1));
+                                                        robot(),
+                                                        env(),
+                                                        targetContact,
+                                                        posStiffness, 
+                                                        extraPosStiffness, 
+                                                        posWeight, 
+                                                        oriStiffness, 
+                                                        oriWeight, 
+                                                        preContactDist,
+                                                        mc_rbdyn::percentWaypoint(0.5, 0.5, 0.5, 0.1));
                                         qpsolver->addTask(task_move_contact);
                                         task_move_contact->toWaypoint();
                                         //#### CONTINUE #########
@@ -365,8 +374,8 @@ namespace mc_control
                 //*************************************************************
                 //comTask->reset();
                 comTask = std::make_shared<mc_tasks::CoMTask>(robots(), 0);
-                Eigen::Vector3d T = task_left_foot->get_ef_pose().translation();
-                comTask->com(comTask->com() + Eigen::Vector3d(0, -T.y(), 0));
+                Eigen::Vector3d T = task_right_foot->get_ef_pose().translation();
+                comTask->com(comTask->com() + Eigen::Vector3d(0, T.y(), 0));
                 qpsolver->addTask(comTask);
 
                 bSpeedConstr = std::make_shared<mc_solver::BoundedSpeedConstr>(robots(), 0, timeStep);
