@@ -1,6 +1,5 @@
 #include "mc_contact_controller.h"
 
-
 namespace mc_control
 {
 
@@ -31,12 +30,6 @@ namespace mc_control
                 //*************************************************************
                 postureTask->stiffness(1.);
                 qpsolver->addTask(postureTask.get());
-                
-                //*************************************************************
-                //COM task
-                //*************************************************************
-                comTask = std::make_shared<mc_tasks::CoMTask>(robots(), robots().robotIndex(), 2.0, 100.);
-                qpsolver->addTask(comTask);
 
                 //*************************************************************
                 //Stability Task
@@ -53,13 +46,13 @@ namespace mc_control
                         robots(), robots().robotIndex(),
                         stiffness, task_weight);
 
-                qpsolver->addTask(task_right_hand);
+                //qpsolver->addTask(task_right_hand);
 
                 task_left_hand = std::make_shared<mc_tasks::EndEffectorTask>("L_F23_LINK",
                         robots(), robots().robotIndex(),
                         stiffness, task_weight);
 
-                qpsolver->addTask(task_left_hand);
+                //qpsolver->addTask(task_left_hand);
 
 
                 LOG_SUCCESS("Added Hand EndEffectorTask");
@@ -72,16 +65,19 @@ namespace mc_control
                         robots().robotIndex(),
                         stiffness, 
                         task_weight);
+                
                 contact_left_foot = std::make_shared<mc_rbdyn::Contact>
                         (robots(), 
                          "LeftFoot", 
                          "AllGround");
+
                 task_right_foot  = std::make_shared<mc_tasks::EndEffectorTask>
                         ("r_sole", 
                         robots(), 
                         robots().robotIndex(),
                         stiffness, 
                         task_weight);
+
                 contact_right_foot = std::make_shared<mc_rbdyn::Contact>
                         (robots(), 
                          "RightFoot", 
@@ -94,8 +90,6 @@ namespace mc_control
 
                 contact_state = PRE_CONTACT_BREAK;
 
-                Eigen::Vector3d T = task_left_foot->get_ef_pose().translation();
-                comTask->com(comTask->com() + Eigen::Vector3d(-T.x(), -T.y(), 0));
                 
                 // qpsolver->addConstraintSet(selfCollisionConstraint);
                 // selfCollisionConstraint.addCollisions(qpsolver, {
@@ -123,8 +117,8 @@ namespace mc_control
                 // Posture Task: move joint J to position 
                 // (theta_des) \in R
                 //*************************************************************
-                this->moveJointByName("NECK_P");
-                this->moveJointByName("NECK_Y");
+                //this->moveJointByName("NECK_P");
+                //this->moveJointByName("NECK_Y");
                 //this->moveJointByName("L_ELBOW_P");
 
                 //*************************************************************
@@ -137,15 +131,19 @@ namespace mc_control
                 //*************************************************************
                 // Move Contact Task
                 //*************************************************************
-                double speed =0.05;
-                double stiffness  =2.0;
-                double weight  = 1000;
+                double speed = 0.1;
+                double stiffness = 2.0;
+                double weight = 1000;
+                double lf_height = 0.05;
+
+                double lf_z = robot().mbc().bodyPosW[robot().bodyIndexByName("l_sole")].translation().z();
                 switch (contact_state) {
                         case PRE_CONTACT_BREAK:
                                  //make sure COM is safe before removing contact
                                 qpsolver->setContacts({*contact_left_foot, *contact_right_foot});
+                                this->display_com();
                                 std::cout << "PRE_CONTACT_BREAK:" << comTask->eval().norm() << "|" << comTask->speed().norm() << std::endl;
-                                if(comTask->eval().norm() < 5e-2 && comTask->speed().norm() < 1e-4){
+                                if(comTask->eval().norm() < 1e-3){
                                         LOG_SUCCESS("Moved COM.");
                                         LOG_SUCCESS("Starting contact Transition.");
                                         qpsolver->setContacts({*contact_right_foot});
@@ -168,11 +166,14 @@ namespace mc_control
 
                                 //double left_foot_z_current = task_left_foot->get_ef_pose().translation().z();
 
-                                if(task_left_foot->get_ef_pose().translation().z()> this->left_foot_z + 0.05){
+                                LOG_SUCCESS("Removing left foot contact " << lf_z);
+                                //double lf_z = robot().mbc().bodyPosW[robot().bodyIndexByName("l_sole")].translation().z();
+                                if( lf_z > this->left_foot_z + lf_height){
                                         LOG_SUCCESS("Left foot contact removed")
                                         qpsolver->removeTask(aRContactTask);
 
-                                        mc_rbdyn::Contact targetContact(robots(), "LFullSole", "AllGround", sva::PTransformd(Eigen::Vector3d(0.4, 0, 0)));
+                                        mc_rbdyn::Contact targetContact(robots(), "LeftFoot", "AllGround", 
+                                                        sva::PTransformd(Eigen::Vector3d(0.2, 0.1, 0)));
 
                                         //double posStiffness, 
                                         //double extraPosStiffness, 
@@ -186,7 +187,7 @@ namespace mc_control
                                                          targetContact,
                                                          5.0, 5.0, 1000,
                                                          3.0, 500,
-                                                         0.05,
+                                                         lf_height,
                                                          mc_rbdyn::percentWaypoint(0.5, 0.5, 0.5, 0.1));
                                         qpsolver->addTask(task_move_contact);
                                         task_move_contact->toWaypoint();
@@ -208,15 +209,31 @@ namespace mc_control
                                 // from waypoint towards contact
                                 if(task_move_contact->speed().norm() < 1e-4) {
                                         qpsolver->removeTask(task_move_contact);
-                                        qpsolver->setContacts({*contact_left_foot, *contact_right_foot});
-                                        qpsolver->removeTask(task_left_foot);
+
+                                        aRContactTask.reset(
+                                                new mc_tasks::AddContactTask(robots(),
+                                                bSpeedConstr,
+                                                *contact_left_foot,
+                                                speed,
+                                                stiffness, 
+                                                weight)
+                                        );
+                                        qpsolver->addTask(aRContactTask);
                                         contact_state = POST_CONTACT_MAKE;
                                 }
                                 break;
                         case POST_CONTACT_MAKE:
                                 // make contact
-                                LOG_SUCCESS("Contact Transition completed.")
-                                qpsolver->setContacts({*contact_left_foot, *contact_right_foot});
+                                LOG_SUCCESS("Putting down left foot contact " << lf_z);
+                                //double lf_z = robot().mbc().bodyPosW[robot().bodyIndexByName("l_sole")].translation().z();
+                                if( lf_z < 0.01){
+                                        qpsolver->removeTask(aRContactTask);
+                                        qpsolver->setContacts({*contact_left_foot, *contact_right_foot});
+                                        contact_state = FINISHED_CONTACT_TRANSITION;
+                                }
+                                break;
+                        case FINISHED_CONTACT_TRANSITION:
+                                //LOG_SUCCESS("Contact Transition completed.")
                                 break;
                 }
                 // if(!moved_com)
@@ -260,34 +277,6 @@ namespace mc_control
 
         }
 
-        void MCContactController::reset(const ControllerResetData & reset_data)
-        {
-                //init task-COM to current COM
-                MCController::reset(reset_data);
-                task_left_hand->reset();
-                task_right_hand->reset();
-
-                task_left_foot->reset();
-                task_right_foot->reset();
-
-                right_hand_current_pose = task_right_hand->get_ef_pose();
-
-                comTask->reset();
-
-                bSpeedConstr = std::make_shared<mc_solver::BoundedSpeedConstr>(robots(), 0, timeStep);
-                solver().addConstraintSet(*bSpeedConstr);
-                //stableTask->reset();
-
-                //comZero = rbd::computeCoM(robot().mb(), robot().mbc());
-                //transformZero = efTask->get_ef_pose();
-
-                //efTask = std::make_shared<mc_tasks::EndEffectorTask>("LLEG_LINK5", robots(), 0);
-                // comTask->com(comTask->com() + Eigen::Vector3d(0,
-                //                               -1*efTask->get_ef_pose().translation().y(),
-                //                               0));
-                //qpsolver->addTask(comTask);
-        }
-
         void MCContactController::display_joints( const rbd::MultiBody &mb){
                 std::cout << "#JOINTS : " << mb.nrJoints() << std::endl;
                 const std::vector< rbd::Joint > joints = mb.joints();
@@ -314,6 +303,10 @@ namespace mc_control
                 for( siter = surfaces.begin(); siter!=surfaces.end(); siter++){
                         std::cout << " [" << sctr++ << "]:" << (*siter).first << std::endl;
                 }
+        }
+        void MCContactController::display_com(){
+                Eigen::Vector3d cur_com = rbd::computeCoM(robot().mb(), robot().mbc());
+                std::cout << "COM:  (" << cur_com.x() << "," << cur_com.y() << "," << cur_com.z() << ")" << std::endl;
         }
         void MCContactController::info()
         {
@@ -348,8 +341,46 @@ namespace mc_control
                 std::cout << std::string(80,'#') << std::endl;
                 this->display_surfaces(env().surfaces());
                 //*************************************************************
-
+                this->display_com();
                 std::cout << "----- INFO END   " << std::string(63, '-') << std::endl;
         }
+        void MCContactController::reset(const ControllerResetData & reset_data)
+        {
+                //init task-COM to current COM
+                MCController::reset(reset_data);
+
+                task_left_hand->reset();
+                task_right_hand->reset();
+                task_left_foot->reset();
+                task_right_foot->reset();
+
+                left_hand_current_pose = task_left_hand->get_ef_pose();
+                right_hand_current_pose = task_right_hand->get_ef_pose();
+
+                left_foot_current_pose = task_left_foot->get_ef_pose();
+                right_foot_current_pose = task_right_foot->get_ef_pose();
+
+                //*************************************************************
+                //COM task
+                //*************************************************************
+                //comTask->reset();
+                comTask = std::make_shared<mc_tasks::CoMTask>(robots(), 0);
+                Eigen::Vector3d T = task_left_foot->get_ef_pose().translation();
+                comTask->com(comTask->com() + Eigen::Vector3d(0, -T.y(), 0));
+                qpsolver->addTask(comTask);
+
+                bSpeedConstr = std::make_shared<mc_solver::BoundedSpeedConstr>(robots(), 0, timeStep);
+                qpsolver->addConstraintSet(*bSpeedConstr);
+                //stableTask->reset();
+
+                //comZero = rbd::computeCoM(robot().mb(), robot().mbc());
+                //transformZero = efTask->get_ef_pose();
+
+                //efTask = std::make_shared<mc_tasks::EndEffectorTask>("LLEG_LINK5", robots(), 0);
+                // comTask->com(comTask->com() + Eigen::Vector3d(0,
+                //                               -1*efTask->get_ef_pose().translation().y(),
+                //                               0));
+        }
+
 }
 

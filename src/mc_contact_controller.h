@@ -4,6 +4,7 @@
 #include <mc_rtc/ros.h>
 #include <mc_solver/BoundedSpeedConstr.h>
 #include <mc_tasks/CoMTask.h>
+#include <mc_rbdyn/stance.h>
 #include <mc_tasks/AddRemoveContactTask.h>
 #include <mc_tasks/EndEffectorTask.h>
 #include <mc_tasks/MoveContactTask.h>
@@ -17,7 +18,8 @@ namespace mc_control
                 CONTACT_BREAK,
                 ENDEFFECTOR_TRANSITION,
                 CONTACT_MAKE,
-                POST_CONTACT_MAKE
+                POST_CONTACT_MAKE,
+                FINISHED_CONTACT_TRANSITION
         };
 
         struct MC_CONTROL_DLLAPI MCContactController : public MCController
@@ -31,6 +33,7 @@ namespace mc_control
                         void display_joints( const rbd::MultiBody &mb);
                         void display_bodies(const rbd::MultiBody &mb);
                         void display_surfaces( const std::map<std::string, mc_rbdyn::SurfacePtr> &surfaces);
+                        void display_com();
                 private:
                         std::shared_ptr<ros::NodeHandle> ros_bridge;
 
@@ -41,11 +44,11 @@ namespace mc_control
                         //specification of contact surfaces
                         std::shared_ptr<mc_tasks::EndEffectorTask> task_left_hand;
                         std::shared_ptr<mc_tasks::EndEffectorTask> task_right_hand;
-                        sva::PTransformd left_hand_current_pose;
-                        sva::PTransformd right_hand_current_pose;
-
                         std::shared_ptr<mc_tasks::EndEffectorTask> task_left_foot;
                         std::shared_ptr<mc_tasks::EndEffectorTask> task_right_foot;
+
+                        sva::PTransformd left_hand_current_pose;
+                        sva::PTransformd right_hand_current_pose;
                         sva::PTransformd left_foot_current_pose;
                         sva::PTransformd right_foot_current_pose;
 
